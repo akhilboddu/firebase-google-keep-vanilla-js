@@ -10,9 +10,11 @@ class App {
     constructor() {
         // localStorage.setItem('test', JSON.stringify(['123']));
         // console.log(JSON.parse(localStorage.getItem('test')));
-        this.notes = [new Note("abc1", "test title", "test text")];
+        this.notes = [];
+        console.log(this.notes);
         this.selectedNoteId = ""
         this.miniSidebar = true;
+        this.userId = "";
 
         this.$activeForm = document.querySelector(".active-form");
         this.$inactiveForm = document.querySelector(".inactive-form");
@@ -29,8 +31,68 @@ class App {
         this.$sidebarActiveItem = document.querySelector(".active-item");
 
 
+        this.$app = document.querySelector("#app");
+        this.$firebaseAuthContainer = document.querySelector("#firebaseui-auth-container");
+        this.$authUserText = document.querySelector(".auth-user");
+        this.$logoutButton = document.querySelector(".logout");
+
+
+        this.ui = new firebaseui.auth.AuthUI(auth);
+        this.handleAuth();
+
         this.addEventListeners();
         this.displayNotes();
+    }
+
+    handleAuth() {
+        firebase.auth().onAuthStateChanged((user) => {
+            if (user) {
+                console.log(user.uid);
+                this.userId = user.uid;
+                this.$authUserText.innerHTML = user.displayName;
+                this.redirectToApp();
+            } else {
+                this.redirectToAuth();
+            }
+        });
+    }
+
+    handleLogout() {
+        firebase.auth().signOut().then(() => {
+            this.redirectToAuth();
+        }).catch((error) => {
+            console.log("ERROR OCCURED", error);
+        });
+    }
+
+    redirectToApp() {
+        this.$firebaseAuthContainer.style.display = "none";
+        this.$app.style.display = "block";
+        this.fetchNotesFromDB();
+    }
+
+    redirectToAuth() {
+        this.$firebaseAuthContainer.style.display = "block";
+        this.$app.style.display = "none";
+
+        this.ui.start('#firebaseui-auth-container', {
+            callbacks: {
+                signInSuccessWithAuthResult: (authResult, redirectUrl) => {
+                    // User successfully signed in.
+                    // Return type determines whether we continue the redirect automatically
+                    // or whether we leave that to developer to handle.
+                    console.log("authResult", authResult.user.uid)
+                    this.userId = authResult.user.uid;
+                    this.$authUserText.innerHTML = user.displayName;
+                    this.redirectToApp();
+                }
+            },
+            signInOptions: [
+                firebase.auth.EmailAuthProvider.PROVIDER_ID,
+                firebase.auth.GoogleAuthProvider.PROVIDER_ID,
+            ],
+            // Other config options...
+        });
     }
 
     addEventListeners() {
@@ -59,7 +121,11 @@ class App {
         this.$sidebar.addEventListener("mouseout", (event) => {
             this.handleToggleSidebar();
         })
-        
+
+        this.$logoutButton.addEventListener("click", (event) => {
+            this.handleLogout();
+        })
+
     }
 
     handleFormClick(event) {
@@ -74,7 +140,7 @@ class App {
         else if (!isInactiveFormClickedOn && !isActiveFormClickedOn) {
             this.addNote({ title, text });
             this.closeActiveForm();
-        }    
+        }
     }
 
     openActiveForm() {
@@ -91,7 +157,7 @@ class App {
 
     openModal(event) {
         const $selectedNote = event.target.closest(".note");
-        if($selectedNote && !event.target.closest(".archive")) {
+        if ($selectedNote && !event.target.closest(".archive")) {
             this.selectedNoteId = $selectedNote.id;
             this.$modalTitle.value = $selectedNote.children[1].innerHTML;
             this.$modalText.value = $selectedNote.children[2].innerHTML
@@ -103,7 +169,7 @@ class App {
     closeModal(event) {
         const isModalFormClickedOn = this.$modalForm.contains(event.target);
         const isCloseModalBtnClickedOn = this.$closeModalForm.contains(event.target);
-        if((!isModalFormClickedOn || isCloseModalBtnClickedOn) && this.$modal.classList.contains("open-modal")) {
+        if ((!isModalFormClickedOn || isCloseModalBtnClickedOn) && this.$modal.classList.contains("open-modal")) {
             this.editNote(this.selectedNoteId, { title: this.$modalTitle.value, text: this.$modalText.value })
             this.$modal.classList.remove("open-modal");
         }
@@ -111,7 +177,7 @@ class App {
 
     handleArchiving(event) {
         const $selectedNote = event.target.closest(".note");
-        if($selectedNote && event.target.closest(".archive")) {
+        if ($selectedNote && event.target.closest(".archive")) {
             this.selectedNoteId = $selectedNote.id;
             this.deleteNote(this.selectedNoteId);
         } else {
@@ -121,9 +187,9 @@ class App {
 
     addNote({ title, text }) {
         if (text != "") {
-            const newNote = new Note(cuid(), title, text);
+            const newNote = { id: cuid(), title, text }
             this.notes = [...this.notes, newNote];
-            this.displayNotes();
+            this.render();
         }
     }
 
@@ -135,23 +201,23 @@ class App {
             }
             return note;
         });
-        this.displayNotes();
+        this.render();
     }
 
     deleteNote(id) {
         this.notes = this.notes.filter((note) => note.id != id);
-        this.displayNotes();
+        this.render();
     }
 
     handleMouseOverNote(element) {
-        const $note = document.querySelector("#"+element.id);
+        const $note = document.querySelector("#" + element.id);
         const $checkNote = $note.querySelector(".check-circle");
         const $noteFooter = $note.querySelector(".note-footer");
         $checkNote.style.visibility = "visible";
         $noteFooter.style.visibility = "visible";
     }
     handleMouseOutNote(element) {
-        const $note = document.querySelector("#"+element.id);
+        const $note = document.querySelector("#" + element.id);
         const $checkNote = $note.querySelector(".check-circle");
         const $noteFooter = $note.querySelector(".note-footer");
         $checkNote.style.visibility = "hidden";
@@ -159,7 +225,7 @@ class App {
     }
 
     handleToggleSidebar() {
-        if(this.miniSidebar) {
+        if (this.miniSidebar) {
             this.$sidebar.style.width = "250px";
             this.$sidebar.classList.add("sidebar-hover");
             this.$sidebarActiveItem.classList.add("sidebar-active-item");
@@ -172,7 +238,49 @@ class App {
             this.miniSidebar = true;
         }
     }
-    
+
+    fetchNotesFromDB() {
+        var docRef = db.collection("users").doc(this.userId);
+
+        docRef.get().then((doc) => {
+            if (doc.exists) {
+                console.log("Document data:", doc.data().notes);
+                this.notes = doc.data().notes;
+                this.displayNotes();
+            } else {
+                // doc.data() will be undefined in this case
+                console.log("No such document!");
+                db.collection("users").doc(this.userId).set({
+                    notes: []
+                })
+                    .then(() => {
+                        console.log("User successfully created!");
+                    })
+                    .catch((error) => {
+                        console.error("Error writing document: ", error);
+                    });
+            }
+        }).catch((error) => {
+            console.log("Error getting document:", error);
+        });
+    }
+
+    saveNotes() {
+        db.collection("users").doc(this.userId).set({
+            notes: this.notes
+        })
+            .then(() => {
+                console.log("Document successfully written!");
+            })
+            .catch((error) => {
+                console.error("Error writing document: ", error);
+            });
+    }
+
+    render() {
+        this.saveNotes();
+        this.displayNotes();
+    }
     displayNotes() {
         this.$notes.innerHTML = this.notes.map((note) =>
             `

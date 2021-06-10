@@ -8,6 +8,9 @@
 
 }
 
+#app {
+    display: "none";
+}
 /* HOVER EFEECTS */
 
 .material-icons-outlined {
@@ -94,6 +97,16 @@ input:focus {
 .profile-actions-area {
     display: flex;
 }
+.profile-actions-area .tooltip {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.auth-user {
+    cursor: pointer;
+}
+
+
 
 /* MAIN SECTION STYLES */
 
